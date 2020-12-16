@@ -17,6 +17,43 @@ from model import make_generator_model, make_discriminator_model,\
 if not os.path.exists('./fig'):
     os.mkdir('./fig')
 
+def plot_loss(hist, path='./loss.png'):
+
+    plt.close('all')
+
+    x = range(len(hist['D_losses']))
+
+    y1 = hist['D_losses']
+    y2 = hist['G_losses']
+
+    plt.plot(x, y1, label='D_loss')
+    plt.plot(x, y2, label='G_loss')
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+
+    plt.legend(loc=4)
+    # plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(path)
+
+def generate_and_save_images(model, epoch, test_input):
+  # `training`이 False로 맞춰진 것을 주목하세요.
+  # 이렇게 하면 (배치정규화를 포함하여) 모든 층들이 추론 모드로 실행됩니다. 
+  predictions = model(test_input, training=False)
+
+  # fig = plt.figure(figsize=(4,4))
+
+  for i in range(predictions.shape[0]):
+      plt.subplot(4, 4, i+1)
+      plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
+      plt.axis('off')
+
+  plt.savefig('./fig/image_at_epoch_{:04d}.png'.format(epoch))
+  plt.clf()
+  # plt.show()
+
 if __name__== '__main__':
     parser = argparse.ArgumentParser(description='DCGAN')
     parser.add_argument('--alpha', default=1.0, type=float, help='one-sided label smoothing coefficient')
@@ -48,8 +85,8 @@ if __name__== '__main__':
     train_hist = {}
     train_hist['D_losses'] = []
     train_hist['G_losses'] = []
-    train_hist['per_epoch_ptimes'] = []
-    train_hist['total_ptime'] = []
+    # train_hist['per_epoch_ptimes'] = []
+    # train_hist['total_ptime'] = []
 
     ## Training Loop
     noise_dim = 100
@@ -59,11 +96,8 @@ if __name__== '__main__':
 
     # `tf.function`이 어떻게 사용되는지 주목해 주세요.
     # 이 데코레이터는 함수를 "컴파일"합니다.
-    @tf.function
+    # @tf.function
     def train_step(images):
-
-        G_loss=[]; D_loss=[]
-
         noise = tf.random.normal([args.batsize, noise_dim])
 
         # D and G learns separately
@@ -75,51 +109,36 @@ if __name__== '__main__':
 
             gen_loss = generator_loss(fake_output)
             disc_loss = discriminator_loss(real_output, fake_output, args.alpha)
-            # train_hist['D_losses'] = []
-            # train_hist['G_losses'] = []
-            # tf.print("G loss:", gen_loss, ", D loss:", disc_loss)
 
             gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
             gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
 
             generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
             discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
-
-            G_loss.append(gen_loss.numpy())
-            D_loss.append(disc_loss.numpy())
         
-        return G_loss, D_loss
-
-    # def generate_and_save_images(model, epoch, test_input):
-    #     # `training`이 False로 맞춰진 것을 주목하세요.
-    #     # 이렇게 하면 (배치정규화를 포함하여) 모든 층들이 추론 모드로 실행됩니다. 
-    #     predictions = model(test_input, training=False)
-
-    #     fig = plt.figure(figsize=(4,4))
-
-    #     for i in range(predictions.shape[0]):
-    #         plt.subplot(4, 4, i+1)
-    #         plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
-    #         plt.axis('off')
-
-    #     plt.savefig('./fig/image_at_epoch_{:04d}.png'.format(epoch))
-    #     plt.show()
+        return gen_loss.numpy(), disc_loss.numpy()
 
     def train(dataset, epochs):
+
         for epoch in range(epochs):
             start = time.time()
 
-            for image_batch in dataset:
-                G_loss_list, D_loss_list = train_step(image_batch)
+            gloss_per_batch=[]; dloss_per_batch=[]
 
-                train_hist['G_losses'].append(np.mean(G_loss_list))
-                train_hist['D_losses'].append(np.mean(D_loss_list))
+            for image_batch in dataset:
+                G_loss, D_loss = train_step(image_batch)
+                gloss_per_batch.append(G_loss)
+                dloss_per_batch.append(D_loss)
+
+            print('[EPOCH {}] G_loss: {}, D_loss: {}'.format(epoch, np.mean(gloss_per_batch), np.mean(dloss_per_batch)))
+            train_hist['G_losses'].append(np.mean(gloss_per_batch))
+            train_hist['D_losses'].append(np.mean(dloss_per_batch))
 
             # GIF를 위한 이미지를 바로 생성합니다.
-            # display.clear_output(wait=True)
-            # generate_and_save_images(generator,
-            #                         epoch + 1,
-            #                         seed)
+            display.clear_output(wait=True)
+            generate_and_save_images(generator,
+                                    epoch + 1,
+                                    seed)
 
             # 15 에포크가 지날 때마다 모델을 저장합니다.
             if (epoch + 1) % 15 == 0:
@@ -129,9 +148,11 @@ if __name__== '__main__':
             print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
 
         # 마지막 에포크가 끝난 후 생성합니다.
-        # display.clear_output(wait=True)
-        # generate_and_save_images(generator,
-        #                         epochs,
-        #                         seed)
+        display.clear_output(wait=True)
+        generate_and_save_images(generator,
+                                epochs,
+                                seed)
 
+        display.clear_output(wait=True)
+        plot_loss(train_hist)
     train(train_dataset, args.epoch)
