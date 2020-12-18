@@ -43,7 +43,7 @@ def generate_and_save_images(model, epoch, test_input):
   # 이렇게 하면 (배치정규화를 포함하여) 모든 층들이 추론 모드로 실행됩니다. 
   predictions = model(test_input, training=False)
 
-  # fig = plt.figure(figsize=(4,4))
+  fig = plt.figure(figsize=(4,4))
 
   for i in range(predictions.shape[0]):
       plt.subplot(4, 4, i+1)
@@ -57,7 +57,7 @@ def generate_and_save_images(model, epoch, test_input):
 if __name__== '__main__':
     parser = argparse.ArgumentParser(description='DCGAN')
     parser.add_argument('--alpha', default=1.0, type=float, help='one-sided label smoothing coefficient')
-    parser.add_argument('--epoch', default=50, type=int, help='EPOCH')
+    parser.add_argument('--epoch', default=100, type=int, help='EPOCH')
     parser.add_argument('--batsize', default=256, type=int, help='BATCH SIZE')
     parser.add_argument('--bufsize', default=60000, type=int, help='BUFFER SIZE')
     parser.add_argument('--glr', default=1e-4, type=float, help='learning rate of G optimizer')
@@ -147,6 +147,9 @@ if __name__== '__main__':
             # print (' 에포크 {} 에서 걸린 시간은 {} 초 입니다'.format(epoch +1, time.time()-start))
             print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
 
+        np.save("./G_losses.npy", train_hist['G_losses'])
+        np.save("./D_losses.npy", train_hist['D_losses'])
+
         # 마지막 에포크가 끝난 후 생성합니다.
         display.clear_output(wait=True)
         generate_and_save_images(generator,
@@ -154,5 +157,6 @@ if __name__== '__main__':
                                 seed)
 
         display.clear_output(wait=True)
-        plot_loss(train_hist)
+        # plot_loss(train_hist)
+
     train(train_dataset, args.epoch)
